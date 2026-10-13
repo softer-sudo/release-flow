@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    branches: [main, 'release/**']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: npm run verify
+      - run: npm run release
+        env:
+          GITHUB_TOKEN: ${{ env.TOKEN }}
+          HUSKY: '0'
+
+  sync-develop:
+    if: github.ref == 'refs/heads/main'
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Open the main -> develop sync PR
+        env:
+          GH_TOKEN: ${{ env.TOKEN }}
+        run: |
+          if git merge-base --is-ancestor origin/main origin/develop; then
+            echo "develop already contains main"
+            exit 0
+          fi
+          open=$(gh pr list --base develop --head main --state open --json number --jq 'length')
+          if [ "$open" != "0" ]; then
+            echo "a sync PR is already open"
+            exit 0
+          fi
+          gh pr create --base develop --head main \
+            --title "chore(release): sync main into develop" \
+            --body "Carries the release commit and tags back into develop. Merge with a merge commit, not squash."

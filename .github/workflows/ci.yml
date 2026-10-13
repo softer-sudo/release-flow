@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop, 'release/**']
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: npm test
+
+  pr-policy:
+    runs-on: ubuntu-latest
+    env:
+      HEAD_REF: ${{ github.head_ref }}
+      BASE_REF: ${{ github.base_ref }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+
+      - name: Branch name carries a ticket key and targets the right branch
+        run: node tools/check-pr.ts "$HEAD_REF" "$BASE_REF"
+
+      - name: PR title is a Conventional Commit with a ticket key
+        if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+        run: printf '%s\n' "$PR_TITLE" | npx commitlint
+
+      - name: Every commit in the PR carries a ticket key
+        if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/')
+        run: npx commitlint --from "$BASE_SHA" --to "$HEAD_SHA"

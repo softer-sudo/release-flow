@@ -1,0 +1,15 @@
+name: Set up Node and dependencies
+description: Install the Node version pinned in .nvmrc and the locked dependencies
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+    - name: Install dependencies
+      shell: bash
+      env:
+        HUSKY: '0'
+      run: npm ci
